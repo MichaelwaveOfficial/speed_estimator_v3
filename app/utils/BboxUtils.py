@@ -5,50 +5,107 @@ import numpy as np
 '''
 
     This module needs work, thought going into how to separate concerns with labels to make things more manageable. 
+
+    Clean up corners with elipses.
+
+        * Detections classes have different colours.
+
+        * Tracking has cp lines from first and current.
+
+        * Speed estimation has speed
+
+        * All recieve IDs + bboxes?
+
+        * Annotations then call it quits.
+
 '''
 
 
-def annotate_bbox(
+def annotate_bbox_corners(
         frame : np.ndarray,
-        detection : dict, 
+        detections : list[dict],
+        vision_type : str, 
         colour=(10, 250, 10),
-        thickness=3,
-        length=25,
-        ) -> np.ndarray:
+        size_factor=0.1,
+        thickness_factor=0.01
+    ) -> np.ndarray:
     
     '''
-        Parse the given detection dictionary and annotate the corners of its bounding box. 
+        Dynamically annotate a given detection adjusting the size and border radius of the annotated bounding box in relativity to 
+            the detections size. 
 
         Parameters: 
-
-            * frame : np.ndarray -> Frame to be annotated upon.
-            * detection : dictionary -> Dictionary containing a detections data. 
-            * colour : tuple -> Base bounding box colour. 
-            * thickness : int -> Base thickness for the annotation lines. 
-            * length : int -> Base length for the annotation lines. 
-
+            * frame : np.ndarray -> frame to be drawn upon.
+            * detection : dict -> detection dictionary containing desired values to plot data points.
+            * colour : tuple -> BGR values to determine annotation colour. 
+            * size_factor : float -> Scaling factor relative to detection size. 
+            * thickness_factor : float -> Line thickness factor relative to detection size. 
+           
         Returns:
-
-            * frame : np.ndarray -> Annotated frame with a detections given bounding box. 
+            * annotated_frame : np.ndarray -> Annotated frame with a detections given bounding box. 
     '''
-   
-    x1, y1, x2, y2 = int(detection['x1']), int(detection['y1']), int(detection['x2']), int(detection['y2'])
 
-    # Top left.
-    cv2.line(frame, (x1, y1), ( x1, y1 + length ) , colour, thickness)
-    cv2.line(frame, (x1, y1), ( x1 + length, y1 ) , colour, thickness)
-    
-    # Bottom left. 
-    cv2.line(frame, (x1, y2), ( x1, y2 - length ) , colour, thickness)
-    cv2.line(frame, (x1, y2), ( x1 + length, y2 ) , colour, thickness)
-    
-    # Top right. 
-    cv2.line(frame, (x2, y1), ( x2 - length, y1 ) , colour, thickness)
-    cv2.line(frame, (x2, y1), ( x2, y1 + length ) , colour, thickness)
-    
-    # Bottom right. 
-    cv2.line(frame, (x2, y2), ( x2, y2 - length ) , colour, thickness)
-    cv2.line(frame, (x2, y2), ( x2 - length, y2 ) , colour, thickness)
+    for detection in detections:
+
+        # Initalise minimum and maximum contraints.
+        min_corner_radius, max_corner_radius = 5, 30
+        min_thickness, max_thickness = 1, 5
+
+        # Fetch detection bounding box values, typecast to full integer values. 
+        x1, y1, x2, y2 = int(detection['x1']), int(detection['y1']), int(detection['x2']), int(detection['y2'])
+
+        # Calculate detection dimensions.
+        detection_width = x2 - x1
+        detection_height = y2 - y1
+        detection_size = min(detection_width, detection_height)
+
+        # Dynamically calculate a detections line thickness and corner radius for annotation.
+        detection_corner_radius = max(min(int(detection_size * size_factor), max_corner_radius), min_corner_radius)
+        detection_thickness = max(min(int(detection_size * thickness_factor) * 2, max_thickness), min_thickness)
+
+        ''' Bounding Box Corners. '''
+
+        # Top left arc.
+        cv2.ellipse(
+            frame,
+            (x1 + detection_corner_radius, y1 + detection_corner_radius),
+            (detection_corner_radius, detection_corner_radius),
+            0, 180, 270,
+            colour,
+            detection_thickness
+        )
+        
+        # Bottom left arc.
+        cv2.ellipse(
+            frame,
+            (x1 + detection_corner_radius, y2 - detection_corner_radius),
+            (detection_corner_radius, detection_corner_radius),
+            0, 90, 180,
+            colour,
+            detection_thickness
+        )
+
+        #Top right arc.
+        cv2.ellipse(
+            frame,
+            (x2 - detection_corner_radius, y1 + detection_corner_radius),
+            (detection_corner_radius, detection_corner_radius),
+            0, 270, 360,
+            colour,
+            detection_thickness
+        )
+
+        # Botton right arc.
+        cv2.ellipse(
+            frame,
+            (x2 - detection_corner_radius, y2 - detection_corner_radius),
+            (detection_corner_radius, detection_corner_radius),
+            0, 0, 90,
+            colour,
+            detection_thickness
+        )
+
+        annotate_detection_data(frame=frame, detection=detection, vision_mode=vision_type)
 
     return frame
 
@@ -57,12 +114,146 @@ def annotate_detection_data(
         frame : np.ndarray,
         detection : dict,
         font = cv2.FONT_HERSHEY_SIMPLEX,
-        font_scale = 1,
-        font_color = (0, 255, 0), 
+        font_scale = 1.25,
+        font_color = (0, 255, 0),
+        bg_colour = (0, 0, 0),
+        border_radius=6,
+        padding=10,
         font_thickness = 3,
+        vision_mode : str = 'object_detection'
     ) -> np.ndarray:
-    return
 
+    x1, y1 = int(detection['x1']), int(detection['y1'])
+    ID, classname, confidence_score = str(detection.get('ID')), str(detection.get('classname')), str(round(detection.get('confidence_score'), 2))
+    speed = str(detection.get('speed', 0))
+
+    label = f"ID : {ID} classname: {classname} confidence score: {confidence_score}"
+
+    if vision_mode == 'object_detection':
+        label = label
+
+    if vision_mode == 'object_tracking':
+        label = f"ID : {ID}"
+
+        annotate_center_point_trail(frame, detection)
+
+        annotate_center_point(frame,detection)
+ 
+    if vision_mode == 'speed_estimation':
+
+        label = f"ID: {ID} Speed: {speed}mph"
+
+    (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, font_thickness)
+
+    box_width = text_width + 2 * padding
+    box_height = text_height + 2 * padding
+
+    # Draw the rounded rectangle (background)
+    cv2.rectangle(
+        frame,
+        (x1 + border_radius, y1),  # Top-left inner corner
+        (x1 + box_width - border_radius, y1 + box_height),  # Bottom-right inner corner
+        bg_colour,
+        -1  # Fill the rectangle
+    )
+    cv2.rectangle(
+        frame,
+        (x1, y1 + border_radius),
+        (x1 + box_width, y1 + box_height - border_radius),
+        bg_colour,
+        -1
+    )
+    # Draw the rounded corners
+    cv2.ellipse(
+        frame,
+        (x1 + border_radius, y1 + border_radius),  # Top-left corner center
+        (border_radius, border_radius),
+        180, 0, 90,
+        bg_colour,
+        -1
+    )
+    cv2.ellipse(
+        frame,
+        (x1 + box_width - border_radius, y1 + border_radius),  # Top-right corner center
+        (border_radius, border_radius),
+        270, 0, 90,
+        bg_colour,
+        -1
+    )
+    cv2.ellipse(
+        frame,
+        (x1 + border_radius, y1 + box_height - border_radius),  # Bottom-left corner center
+        (border_radius, border_radius),
+        90, 0, 90,
+        bg_colour,
+        -1
+    )
+    cv2.ellipse(
+        frame,
+        (x1 + box_width - border_radius, y1 + box_height - border_radius),  # Bottom-right corner center
+        (border_radius, border_radius),
+        0, 0, 90,
+        bg_colour,
+        -1
+    )
+
+    # Add the text on top of the background
+    text_position = (x1 + padding, y1 + box_height - padding)
+
+    annotated_frame = cv2.putText(
+        frame,
+        label,
+        text_position,
+        font,
+        font_scale,
+        font_color,
+        font_thickness
+    )
+
+    return annotated_frame
+
+
+def annotate_center_point(
+        frame,
+        detection,
+        colour=(0, 0, 255),
+        radius=5,
+        thickness=-1,
+    ) -> np.ndarray:
+
+    center_x, center_y = calculate_center_point(detection=detection)
+
+    cv2.circle(
+        frame,
+        (center_x, center_y),
+        radius,
+        colour,
+        thickness
+    )
+
+
+def annotate_center_point_trail(
+        frame,
+        detection,
+        colour=(180, 50, 50),
+        thickness=8
+    ):
+
+    if 'center_points_history' not in detection:
+        return frame
+
+
+    for x in range(1, len(detection['center_points_history'])):
+        cv2.line(
+            frame,
+            detection['center_points_history'][x - 1],
+            detection['center_points_history'][x],
+            colour,
+            thickness
+        )
+
+    return frame
+    
 
 def calculate_center_point(detection):
 
@@ -105,4 +296,4 @@ def measure_euclidean_distance(p1, p2):
             * euclidean_distance : float -> distance between one position and another. 
     '''
 
-    return (( p1[0] - p2[0] ) **2 + ( p1[1] - p2[1] ) **2) **0.5
+    return ( p1[0] - p2[0] ) **2 + ( p1[1] - p2[1] ) **2

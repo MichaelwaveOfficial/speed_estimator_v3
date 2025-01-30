@@ -22,83 +22,53 @@ class SpeedEstimation(object):
     
     def apply_estimations(self, detections : list[dict], frame_rate : int, speed_limit : int) -> list[dict]:
 
-        ''' 
-            Function to calculate the values required to estimate a detections speed, apply those estimations by modifying each dictionary entry. 
-
-            Parameters:
-                * detections -> list encapsulating detection dictionaries to be modified with speed estimations. 
-            Returns:
-                * list[dict] -> Parsed list of dictionary entries, this time with the detections estimated speed values. 
         '''
         
-        # Iterate over detection dictionaries.
+        '''
+
         for detection in detections:
-            
-            # If PPM value not present, assign a calculated value. 
+
             if 'ppm' not in detection:
-                detection['ppm'] = self.calibrate_ppm(detection=detection)
+                detection['ppm'] = detection.get('ppm', self.calibrate_ppm(detection=detection))
 
-            # Get instantanoues and average elapsed times. 
-            frame_by_frame_elapsed_time = detection['current_timestamp'] - detection['previous_timestamp']
-            average_elapsed_time = detection['current_timestamp'] - detection['first_timestamp']
+            if 'previous_center_point' in detection and \
+                'current_center_point' in detection:
 
-            # Check values are not null before proceeding. 
-            if frame_by_frame_elapsed_time > 0 and \
-                average_elapsed_time > 0:
+                frame_elapsed_time = detection['current_timestamp'] - detection['previous_timestamp']
+                avg_elapsed_time = detection['current_timestamp'] - detection['first_timestamp']
 
-                # Get intananeous pixel distance.
-                frame_by_frame_pixel_distance = measure_euclidean_distance(
-                    p1=detection['previous_center_point'],
-                    p2=detection['current_center_point']
-                )
+                ''''
+                
+                    Frame elapsed time always ZERO. ASSIGNMENT OR CALCULATIONS WRONG??
+                '''
 
-                # Get average pixel distance.
-                average_pixel_distance = measure_euclidean_distance(
-                    p1=detection['first_center_point'],
-                    p2=detection['current_center_point']
-                )   
+                if frame_elapsed_time > 0 and avg_elapsed_time > 0:
 
-                # Calculate instantaneous speed.
-                frame_by_frame_speed = self.calculate_speed(
-                    pixel_distance=frame_by_frame_pixel_distance,
-                    ppm=detection['ppm'],
-                    elapsed_time=frame_by_frame_elapsed_time,
-                    frame_rate=frame_rate
-                )
+                    frame_distance = measure_euclidean_distance(
+                        detection['previous_center_point'], detection['current_center_point']
+                    )
 
-                # Calculate average speed.
-                average_speed = self.calculate_speed(
-                    pixel_distance=average_pixel_distance,
-                    ppm=detection['ppm'],
-                    elapsed_time=average_elapsed_time,
-                    frame_rate=self.frame_rate
-                )
+                    avg_distance = measure_euclidean_distance(
+                        detection['first_center_point'], detection['current_center_point']
+                    )
 
-                # Smooth speed calculations to mitigate volatility. 
-                smoothed_speed = self.calculate_speed_weighted_average(
-                    raw_speed=frame_by_frame_speed,
-                    avg_speed=average_speed
-                )
+                    frame_speed = self.calculate_speed(frame_distance, detection['ppm'], frame_elapsed_time, frame_rate)
+                    avg_speed = self.calculate_speed(avg_distance, detection['ppm'], avg_elapsed_time, frame_rate)
 
-                # Fetch detection ID.
-                detection_ID = int(detection.get('ID', 0))
+                    smoothed_speed = self.speed_weighted_average(frame_speed, avg_speed)
 
-                # If ID not present in speed dictionary.
-                if detection_ID not in self.detections_speeds:
-                    # Create a new entry to store its most recent speeds. 
-                    self.detections_speeds[detection_ID] = []
+                    detection['speed_history'] = [smoothed_speed]
 
-                # Append new entry and its smoothed speed to speeds dictionary. 
-                self.detections_speeds[detection_ID].append(smoothed_speed)
+                    detection['speed'] = round(self.detection_rolling_average(detection['speed_history']), 2)
 
-                # Assign new key pair value with smoothed average speeds. 
-                detection['speed'] = self.detection_rolling_average_speed(self.detections_speeds[detection_ID])
+                    print(f'detection ID:{detection["ID"]}\ndetection speed:{detection["speed"]}')
 
-        # Return updated list of dictionary entries.
+            detection['previous_center_point'] = detection['current_center_point']
+
         return detections
     
 
-    def capture_offense(self, ):
+    def capture_offense(self, speed: float):
 
         '''
             WIP
@@ -108,10 +78,13 @@ class SpeedEstimation(object):
                 * How much over the limit?
         '''
 
-        return
+        if speed > self.speed_limit:
+            return True
+
+        return False
     
 
-    def calculate_speed_weighted_average(self, raw_speed : float, avg_speed : float, alpha : int = 0.7) -> float:
+    def speed_weighted_average(self, raw_speed : float, avg_speed : float, alpha : int = 0.7) -> float:
 
         '''
             Calculate a detections weighted average to smooth the output of the speed calculations. This is done by leveraging
@@ -129,8 +102,8 @@ class SpeedEstimation(object):
                 * float -> Smoothed speed, calculated as the weighted average of both the raw and average speeds. 
         '''
 
-        return round((alpha * raw_speed) + (1 - alpha) * avg_speed, 2)
-
+        return (alpha * raw_speed) + ((1 - alpha) * avg_speed)
+    
 
     def calculate_speed(self, pixel_distance : float, ppm : float, elapsed_time : float, frame_rate : int):
         
@@ -149,7 +122,7 @@ class SpeedEstimation(object):
         '''
         
         # Divide elapsed time by frame rate. 
-        elapsed_time = elapsed_time / frame_rate
+        elapsed_time = (elapsed_time / frame_rate)
         
         # Ensure provided values are not null.
         if elapsed_time <= 0 or ppm <= 0:
@@ -192,7 +165,7 @@ class SpeedEstimation(object):
         # Return speed multiplied by specified conversion factor. 
         return speed * conversion_factors[measurement]
     
-
+    
     def calibrate_ppm(self, detection : dict) -> float:
 
         '''
@@ -221,7 +194,7 @@ class SpeedEstimation(object):
         return (ppm_width + ppm_height) / 2
     
 
-    def detection_rolling_average_speed(self, detection_speeds : dict[float], window_length : int = 5):
+    def detection_rolling_average(self, speeds : dict[float], window_length : int = 5):
 
         '''
             Calculates a rolling average of detections speeds from the paramaterised window length.
@@ -234,11 +207,4 @@ class SpeedEstimation(object):
                 * float -> Rolling average of speeds for given number of detections. 
         '''
 
-        # If the detections accumulated speeds are less than the specified window length.
-        if len(detection_speeds) < window_length:
-            # Return the average of those speeds divided by the max length of the dictionary.
-            return sum(detection_speeds) / max(len(detection_speeds), 1)
-        
-        # Otherwise, return early with maximum length permitted with the detections given.
-        return sum(detection_speeds[-window_length:]) / window_length
-    
+        return sum(speeds[-window_length:]) / min(len(speeds), window_length)

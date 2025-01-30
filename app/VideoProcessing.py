@@ -4,9 +4,10 @@ from .Settings import *
 from .utils.ObjectDetection import ObjectDetection
 from .utils.ObjectTracking import ObjectTracking
 from .utils.SpeedEstimation import SpeedEstimation
+from .utils.BboxUtils import annotate_bbox_corners
 
 
-object_detection = ObjectDetection(DETECTION_MODEL_PATH)
+object_detection = ObjectDetection(model=DETECTION_MODEL_PATH, confidence_threshold=0.8)
 object_tracking = ObjectTracking()
 speed_estimation = SpeedEstimation()
 
@@ -38,37 +39,25 @@ def process_video(frame : np.ndarray, speed_limit : int = None, frame_rate : int
     ''' Object Tracking '''
 
     # Assign IDs to detections and update their center point values.
-    detections : list[dict] = object_tracking.update_tracker(detections=detections)
+    tracked_detections : list[dict] = object_tracking.update_tracker(detections=detections)
 
     ''' Speed Estimation. '''
 
     # Estimate a detections speed by comparing current and previous center points. 
-    detections : list[dict] = speed_estimation.apply_estimations(
-        detections=detections,
-        frame_rate=frame_rate,
-        speed_limit=speed_limit
+    speed_estimation_detections : list[dict] = speed_estimation.apply_estimations(
+        detections=tracked_detections,
+        speed_limit=speed_limit,
+        frame_rate=frame_rate
     )
 
     ''' Frame Annotation. '''
-
-    # Annotate accordingly depending on vision type.
-    match vision_type:
-
-        case 'object_detection':
-
-            print(f'{vision_type} selected.')
-        
-        case 'object_tracking':
-
-            print(f'{vision_type} selected.')
-        
-        case 'speed_estimation':
-
-            print(f'{vision_type} selected.')
-
-        case _:
-
-            print('No vision mode selected.')
+    
+    # Supply the final step of processed data to be annotated for traffic insights. 
+    annotated_frame = annotate_bbox_corners(
+        frame=frame,
+        detections=speed_estimation_detections,
+        vision_type=vision_type
+    )
 
     # Return frame wether modified or not. 
-    return frame
+    return annotated_frame

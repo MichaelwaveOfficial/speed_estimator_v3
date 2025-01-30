@@ -10,7 +10,7 @@ class ObjectDetection(object):
         Class to handle obiject detection leveragng ultralytics YOLO models. 
     '''
 
-    def __init__(self, model : str):
+    def __init__(self, model : str, confidence_threshold : float):
 
         # Select device for processing in attempt for hardware accelaration.
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -35,7 +35,7 @@ class ObjectDetection(object):
         } 
 
         # Confidence threshold for a detection to be considered relevant.
-        self.confidence_threshold = 0.70
+        self.confidence_threshold = confidence_threshold
 
     
     def run_inference(self, frame : np.ndarray) -> dict:
@@ -52,6 +52,10 @@ class ObjectDetection(object):
             Function to run desired model inference on the provided frame input to return the detections data to later be 
             passed onto annoatations later on in the pipeline.
         '''
+
+        # Ensure input frame is valid data type.
+        if frame is None or not isinstance(frame, np.ndarray):
+            raise ValueError('Frame input is not valid! Must be a numpy array!')
 
         # Initialise empty list. 
         filtrated_detections = []
