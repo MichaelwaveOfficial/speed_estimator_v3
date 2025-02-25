@@ -3,7 +3,7 @@ import os
 import cv2
 import time
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
 from .Settings import *
 from .VideoProcessing import process_video
@@ -20,14 +20,14 @@ class VideoPlayer(object):
         ''' Application Constants. '''
 
         self.APP_GEOMETRY = '1280x720'
-        self.ICON_SIZE = 50
+        self.ICON_SIZE = 40
         self.DARK_BG = '#343a40'
         self.PADDING = {
             'min' : 5,
             'med' : 10, 
             'max' : 20, 
-            'padx' : 30,
-            'pady' : 12
+            'padx' : 15,
+            'pady' : 10
         }
 
         # Key value pairs for current, national UK, speed limits in MPH.
@@ -42,7 +42,8 @@ class VideoPlayer(object):
         self.vision_modes = {
             'Object Detection' : 'object_detection',
             'Object Tracking' : 'object_tracking',
-            'Speed Estimation' : 'speed_estimation'
+            'Speed Estimation' : 'speed_estimation',
+            'Plate Recognition' : 'plate_reading'
         }
         
         ''' Root widget setup. '''
@@ -60,7 +61,8 @@ class VideoPlayer(object):
         self.total_frames = 0
         self.fps = 0
         self.current_speed_limit = None
-        self.current_vision_mode = None
+        self.current_vision_mode = self.vision_modes['Object Detection']
+        self.base_confidence = BASE_YOLO_CONFIDENCE_THRESHOLD
 
         ''' Application Widget Icons. '''
 
@@ -116,7 +118,11 @@ class VideoPlayer(object):
 
         # Frame widget for vision modes.
         self.vision_modes_frame = customtkinter.CTkFrame(master=self.player_controls_dropdowns)
-        self.vision_modes_frame.pack(pady=self.PADDING['pady'], padx=self.PADDING['padx'])
+        self.vision_modes_frame.pack(pady=self.PADDING['pady'], padx=self.PADDING['padx'], side='left')
+
+        # Frame to enscapsulate model confidence seek bar.
+        self.confidence_thresholds_frame = customtkinter.CTkFrame(master=self.player_controls_dropdowns)
+        self.confidence_thresholds_frame.pack(pady=self.PADDING['pady'], padx=self.PADDING['padx'])
 
         '''     Overlay Frames.     '''
 
@@ -144,6 +150,9 @@ class VideoPlayer(object):
         self.lbl_set_vision_mode = customtkinter.CTkLabel(master=self.vision_modes_frame, text='Set Vision Mode:')
         self.lbl_set_vision_mode.pack()
 
+        self.lbl_model_threshold = customtkinter.CTkLabel(master=self.confidence_thresholds_frame, text=f'Set Model Confidence: {str(self.base_confidence)}')
+        self.lbl_model_threshold.pack()
+
         '''     OptionMenu Widgets.     '''
 
         self.speed_limit_options_menu = customtkinter.CTkOptionMenu(master=self.speed_limit_frame, values=list(self.NATIONAL_SPEED_LIMITS.keys()), command=self.set_speed_limit)
@@ -158,6 +167,12 @@ class VideoPlayer(object):
         self.video_seek_bar.pack(pady=self.PADDING['pady'], padx=self.PADDING['padx'], fill='x')
         self.video_seek_bar.set(self.current_frame)
 
+        ''' Confidence Threshold Seeker. '''
+
+        self.confidence_seeker = customtkinter.CTkSlider(master=self.confidence_thresholds_frame, orientation=tk.HORIZONTAL, command=self.update_model_threshold, from_=0, to=1)
+        self.confidence_seeker.pack(pady=self.PADDING['pady'], padx=self.PADDING['padx'], fill='x')
+        self.confidence_seeker.set(self.base_confidence)
+
         ''' Video Seeker Timestamp Labels. '''
 
         self.video_time_label = customtkinter.CTkLabel(master=self.seek_bar_frame, text='0:00 / 0:00')
@@ -169,6 +184,11 @@ class VideoPlayer(object):
         '''
             Helper function for user to source their desired video of choice within their hardwares file explorer.
         '''
+
+        # Don't proceed with video import if no speed limit is set
+        if self.current_speed_limit is None:
+            messagebox.showwarning('Speed Limit Required', 'Please set a speed limit before importing a video :)')
+            return
 
         # If media currently present playng, reset application.
         if self.video is not None:
@@ -269,7 +289,8 @@ class VideoPlayer(object):
             frame=frame,
             speed_limit=self.current_speed_limit,
             frame_rate=self.fps,
-            vision_type=self.current_vision_mode
+            vision_type=self.current_vision_mode,
+            confidence_threshold=self.base_confidence
         )
         
 
@@ -347,6 +368,14 @@ class VideoPlayer(object):
         self.current_vision_mode = self.vision_modes.get(self.vision_mode_options_menu.get(), 0)
 
         print(f'Vision mode : {self.current_vision_mode} selected.')
+
+
+    def update_model_threshold(self, threshold) -> None:
+    
+        ''' Helper function allowing users to update a models confidence threshold dynamically. '''
+
+        self.base_confidence = float(threshold)
+        self.lbl_model_threshold.configure(text=f'Set Model Confidence: {str(self.base_confidence)}')
     
 
     def delete_import(self) -> None:

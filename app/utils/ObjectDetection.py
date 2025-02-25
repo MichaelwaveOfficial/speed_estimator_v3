@@ -41,16 +41,14 @@ class ObjectDetection(object):
     def run_inference(self, frame : np.ndarray) -> dict:
 
         '''
-            Parameters:
+            Function to run desired model inference on the provided frame input to return the detections data to later be 
+                passed onto annoatations later on in the pipeline.
 
+            Parameters:
             * frame : np.ndarray -> input image for the detection model to run inference on.
             
             Returns:
-            
             * filtrated_detections : dict -> dictionary containing detection metadata to be processed. 
-
-            Function to run desired model inference on the provided frame input to return the detections data to later be 
-            passed onto annoatations later on in the pipeline.
         '''
 
         # Ensure input frame is valid data type.
@@ -101,11 +99,8 @@ class ObjectDetection(object):
             by the model.
 
             Parameters:
-
                 * class_ID : int -> Integer value representing the classification value.
-
             Returns:
-
                 * classname : str -> string value for better user legibility. 
         '''
 
@@ -114,9 +109,7 @@ class ObjectDetection(object):
 
     def check_for_hardware_acceleration(self) -> str:
 
-        '''
-            Simple function to inform users if hardware acceleration is being utlised or not. 
-        '''
+        ''' Simple function to inform users if hardware acceleration is being utlised or not. '''
 
         if str(self.device) == 'cuda':
             print(f'Hardware acceleration initialised with {self.device}')

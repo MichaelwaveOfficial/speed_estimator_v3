@@ -24,7 +24,7 @@ import numpy as np
 def annotate_bbox_corners(
         frame : np.ndarray,
         detections : list[dict],
-        vision_type : str, 
+        vision_type : str = 'object_detection', 
         colour=(10, 250, 10),
         size_factor=0.1,
         thickness_factor=0.01
@@ -53,6 +53,12 @@ def annotate_bbox_corners(
 
         # Fetch detection bounding box values, typecast to full integer values. 
         x1, y1, x2, y2 = int(detection['x1']), int(detection['y1']), int(detection['x2']), int(detection['y2'])
+        offender = bool(detection.get('offender', False))
+
+        if offender:
+            colour = (10, 10, 255)
+        else:
+            colour = (10, 255, 10)
 
         # Calculate detection dimensions.
         detection_width = x2 - x1
@@ -105,6 +111,7 @@ def annotate_bbox_corners(
             detection_thickness
         )
 
+        
         annotate_detection_data(frame=frame, detection=detection, vision_mode=vision_type)
 
     return frame
@@ -137,7 +144,6 @@ def annotate_detection_data(
 
         annotate_center_point_trail(frame, detection)
 
-        annotate_center_point(frame,detection)
  
     if vision_mode == 'speed_estimation':
 
@@ -215,13 +221,13 @@ def annotate_detection_data(
 
 def annotate_center_point(
         frame,
-        detection,
+        center_point,
         colour=(0, 0, 255),
         radius=5,
         thickness=-1,
     ) -> np.ndarray:
 
-    center_x, center_y = calculate_center_point(detection=detection)
+    center_x, center_y = center_point
 
     cv2.circle(
         frame,
@@ -239,20 +245,30 @@ def annotate_center_point_trail(
         thickness=8
     ):
 
-    if 'center_points_history' not in detection:
+    if 'center_points' not in detection:
         return frame
+    
+    center_points_list = detection['center_points']
+    points_list_length = len(center_points_list)
 
+    initial_center_point = center_points_list[0]
+    final_center_point = center_points_list[-1]
 
-    for x in range(1, len(detection['center_points_history'])):
+    annotate_center_point(frame, initial_center_point, (10, 10, 255))
+
+    for x in range(1, points_list_length):
         cv2.line(
             frame,
-            detection['center_points_history'][x - 1],
-            detection['center_points_history'][x],
+            center_points_list[x - 1],
+            center_points_list[x],
             colour,
             thickness
         )
 
+    annotate_center_point(frame, final_center_point, (10, 10, 255))
+
     return frame
+    
     
 
 def calculate_center_point(detection):
@@ -296,4 +312,4 @@ def measure_euclidean_distance(p1, p2):
             * euclidean_distance : float -> distance between one position and another. 
     '''
 
-    return ( p1[0] - p2[0] ) **2 + ( p1[1] - p2[1] ) **2
+    return (p1[0] - p2[0]) **2 + (p1[1] - p2[1]) **2
