@@ -44,9 +44,28 @@ class Annotations(object):
 
             frame = self.annotate_bbox_corners(frame, detection)
 
-            frame = self.annotate_labels_onto_frame(frame, detection, vision_type)
+            frame = self.annotate_label(frame, detection, vision_type)
 
         return frame
+    
+
+    def fetch_bbox_colour(self, detection : dict) -> tuple[int, int, int]:
+
+        '''
+            Fetch relevant colour to highlight whether or not the detection is considered an offender due 
+                to violations of the road rules. 
+
+            Paramaters:
+                * detection : (dict) : dictionary containing data of interest.
+            Returns:
+                * colour : (tuple[int, int, int]) : correct BGR values for bbox. 
+        '''
+
+        # If present, fetch detections offender status. Otherwise, false as not present. 
+        offender = bool(detection.get('offender', False))
+
+        # Assign bbox colour depending on detection status.
+        return self.bbox_colours['offender'] if offender else self.bbox_colours['standard']
 
             
     def annotate_bbox_corners(self, frame, detection):
@@ -61,107 +80,75 @@ class Annotations(object):
         
         Returns:
             * annotated_frame : np.ndarray -> Annotated frame with a detections given bounding box. 
-    '''
-
-        ''' Ingest and parse data to dynmaically handle sizing. '''
+        '''
 
         # Fetch detection bounding box values, typecast to full integer values. 
         x1, y1, x2, y2 = int(detection['x1']), int(detection['y1']), int(detection['x2']), int(detection['y2'])
 
-        # If present, fetch detections offender status. Otherwise, false as not present. 
-        offender = bool(detection.get('offender', False))
-
         # Calculate detection dimensions.
-        detection_width = x2 - x1
-        detection_height = y2 - y1
-        detection_size = min(detection_width, detection_height)
+        detection_size = min(x2 - x1, y2 - y1)
 
         # Dynamically calculate a detections line thickness and corner radius for annotation.
-        detection_corner_radius = max(min(int(detection_size * self.size_factor), self.max_corner_radius), self.min_corner_radius)
-        detection_thickness = max(min(int(detection_size * self.thickness_factor) * 2, self.max_thickness), self.min_thickness)
+        corner_radius = max(min(int(detection_size * self.size_factor), self.max_corner_radius), self.min_corner_radius)
+        thickness = max(min(int(detection_size * self.thickness_factor) * 2, self.max_thickness), self.min_thickness)
 
-        # Assign bbox colour depending on detection status.
+        # Fetch appropriate colour for detection.
+        colour = self.fetch_bbox_colour(detection=detection)       
 
-        colour = self.bbox_colours['offender'] if offender else self.bbox_colours['standard']
-
-        ''' Bounding Box Corners. '''
-
-        # Top left arc.
-        cv2.ellipse(
-            frame,
-            (x1 + detection_corner_radius, y1 + detection_corner_radius),
-            (detection_corner_radius, detection_corner_radius),
-            0, 180, 270,
-            colour,
-            detection_thickness
-        )
+        # Store corner values within a list.
+        bbox_corners = [
+            ((x1 + corner_radius, y1 + corner_radius), 180, 270),
+            ((x1 + corner_radius, y2 - corner_radius), 90, 180),
+            ((x2 - corner_radius, y1 + corner_radius), 270, 360),
+            ((x2 - corner_radius, y2 - corner_radius), 0, 90)
+        ]
         
-        # Bottom left arc.
-        cv2.ellipse(
-            frame,
-            (x1 + detection_corner_radius, y2 - detection_corner_radius),
-            (detection_corner_radius, detection_corner_radius),
-            0, 90, 180,
-            colour,
-            detection_thickness
-        )
+        # Iterate over bbox corner values, annotate with ellipses.
+        for (center_x, center_y), start_angle, end_angle in bbox_corners:
 
-        #Top right arc.
-        cv2.ellipse(
-            frame,
-            (x2 - detection_corner_radius, y1 + detection_corner_radius),
-            (detection_corner_radius, detection_corner_radius),
-            0, 270, 360,
-            colour,
-            detection_thickness
-        )
-
-        # Botton right arc.
-        cv2.ellipse(
-            frame,
-            (x2 - detection_corner_radius, y2 - detection_corner_radius),
-            (detection_corner_radius, detection_corner_radius),
-            0, 0, 90,
-            colour,
-            detection_thickness
-        )
+            cv2.ellipse(
+                frame, 
+                (int(center_x), int(center_y)),
+                (corner_radius, corner_radius),
+                0, start_angle, end_angle,
+                colour, 
+                thickness
+            )
 
         return frame
     
 
-    def adjust_font_scale(self, frame):
+    def fetch_text_properties(self, label : str, frame : np.ndarray) -> tuple[tuple[int, int], float]:
+        
+        ''' '''
 
-        base_scale = self.font_scale
+        current_font_scale = self.font_scale
+        min_font_scale = 0.8
+        max_text_width = frame.shape[1] - self.label_padding * 2
 
-        self.font_scale(max(1.5, (frame.shape[0] / frame.shape[1])) * base_scale)
+        text_width, text_height = cv2.getTextSize(label, self.font, current_font_scale, self.font_thickness)[0]
+
+        while text_width > max_text_width and current_font_scale > min_font_scale:
+
+            current_font_scale -= 0.1
+            text_width, text_height = cv2.getTextSize(label, self.font, current_font_scale, self.font_thickness)[0]
+
+        return (text_width, text_height), current_font_scale
     
-    
-    def get_text_dimensions(self, text, frame):
 
-        min_font_scale = 1.25
+    def calculate_label_position(self, bbox_bottom, center_point, text_size):
 
-        text_size = cv2.getTextSize(text, self.font, self.font_scale, self.font_thickness)[0]
         text_width, text_height = text_size
-        max_text_width = frame.shape[1] - self.label_padding
 
-        while text_width > max_text_width and self.font_scale > min_font_scale:
-            self.font_scale -= 0.2
-            text_size = cv2.getTextSize(text, self.font, self.font_scale, self.font_thickness)[0]
-            text_width, text_height = text_size
-
-        if text_width > max_text_width:
-            while cv2.getTextSize(
-                text + ' ', self.font, self.font_scale, self.font_thickness
-                )[0][0] > max_text_width and \
-                     len(text) > 1:
-                        text = text[:-1]
-
-        return text_width, text_height
+        return {
+            'x' : int(center_point[0] - text_width // 2), 'y' : int(bbox_bottom + text_height + self.label_padding),
+            'width' : text_width + 2 * self.label_padding, 'height' : text_height + 2 * self.label_padding
+        }
     
 
-    def get_label_dimensions(self, label):
+    def get_label_dimensions(self, label, frame):
 
-        (text_width, text_height), _ = cv2.getTextSize(label, self.font, self.font_scale, self.font_thickness)
+        text_width, text_height = self.fetch_text_properties(label, frame)[0]
 
         box_width = text_width + 2 * self.label_padding
         box_height = text_height + 2 * self.label_padding
@@ -169,225 +156,115 @@ class Annotations(object):
         return box_width, box_height
 
 
-    def draw_label_bg(self, label, frame, x1, y1):
-
-        box_width, box_height = self.get_label_dimensions(label=label)
-
-        # Draw the rounded rectangle (background)
-        cv2.rectangle(
-            frame,
-            (x1 + self.border_radius, y1),  # Top-left inner corner
-            (x1 + box_width - self.border_radius, y1 + box_height),  # Bottom-right inner corner
-            self.bg_colour,
-            -1  # Fill the rectangle
-        )
-        cv2.rectangle(
-            frame,
-            (x1, y1 + self.border_radius),
-            (x1 + box_width, y1 + box_height - self.border_radius),
-            self.bg_colour,
-            -1
-        )
-        # Draw the rounded corners
-        cv2.ellipse(
-            frame,
-            (x1 + self.border_radius, y1 + self.border_radius),  # Top-left corner center
-            (self.border_radius, self.border_radius),
-            180, 0, 90,
-            self.bg_colour,
-            -1
-        )
-        cv2.ellipse(
-            frame,
-            (x1 + box_width - self.border_radius, y1 + self.border_radius),  # Top-right corner center
-            (self.border_radius, self.border_radius),
-            270, 0, 90,
-            self.bg_colour,
-            -1
-        )
-        cv2.ellipse(
-            frame,
-            (x1 + self.border_radius, y1 + box_height - self.border_radius),  # Bottom-left corner center
-            (self.border_radius, self.border_radius),
-            90, 0, 90,
-            self.bg_colour,
-            -1
-        )
-        cv2.ellipse(
-            frame,
-            (x1 + box_width - self.border_radius, y1 + box_height - self.border_radius),  # Bottom-right corner center
-            (self.border_radius, self.border_radius),
-            0, 0, 90,
-            self.bg_colour,
-            -1
-        )
-
-
-    def annotate_labels_onto_frame(self, frame, detection, vision_type : str):
+    def draw_label_background(self, frame, position) -> np.ndarray:
 
         ''' '''
 
-        x1, y1, x2, y2 = int(detection['x1']), int(detection['y1']), int(detection['x2']), int(detection['y2'])
+        x, y = position['x'], position['y']
+        w, h = position['width'], position['height']
+        radius = self.border_radius
 
-        center_x, center_y = calculate_center_point(detection)
+        cv2.rectangle(frame, (x + radius, y), ( x + w - radius, y + h), self.bg_colour, -1)
+        cv2.rectangle(frame, (x, y + radius), (x + w, y + h - radius), self.bg_colour, -1)
 
-        ID, classname, confidence_score = str(detection.get('ID')), str(detection.get('classname')), str(round(detection.get('confidence_score'), 2))
-        speed = str(detection.get('speed', 0))
+        label_corners = [
+            # top left.
+            (x + radius, y + radius, 180, 270),
+            # top right.
+            (x + w - radius, y + radius, 270, 360),
+            # bottom left.
+            (x + radius, y + h - radius, 90, 180),
+            # bottom right.
+            (x + w - radius, y + h - radius, 0, 90)
+        ]
 
-        label = ''
+        for center_x, center_y, start_angle, end_angle in label_corners:
 
-        if vision_type == 'object_detection':
-            label = f"ID : {ID} | Classname: {classname} | Confidence Score: {confidence_score}"
-
-        if vision_type == 'object_tracking':
-            label = f"ID : {ID}"
-
-            self.annotate_center_point_trail(frame, detection)
-
-        if vision_type == 'speed_estimation':
-            label = f"ID: {ID} | Speed: {speed}mph"
-
-        if vision_type == 'plate_reading':
-            label = f'ID: {ID} | Plate: NA11 BHJ'
-    
-        _, box_height = self.get_label_dimensions(label)
-        text_width, text_height = self.get_text_dimensions(label, frame)
-
-        label_x =  int(center_x - text_width / 2)
-        label_y = int(y2 + text_height + self.label_padding)
-        
-        self.draw_label_bg(label, frame, label_x, label_y)
-
-        # Add the text on top of the background
-        text_position = (label_x + self.label_padding, label_y + text_height + self.label_padding)
-
-        annotated_frame = cv2.putText(
-            frame,
-            label,
-            text_position,
-            self.font,
-            self.font_scale,
-            self.font_colour,
-            self.font_thickness
-        )
-
-        return annotated_frame
-
-
-    def crop_detection(self, frame, detection, captured_at):
-
-        ''' '''
-
-        test_plate = 'NA11 BHJ'
-
-        x1, x2, y1, y2 = detection['x1'], detection['x2'], detection['y1'], detection['y2']
-        ID = detection['ID']
-
-        annotated_frame = frame.copy()
-
-        # Annotate detection of concern.
-        annotated_frame = self.annotate_bbox_corners(annotated_frame, detection)
-
-        h, w = annotated_frame.shape[:2]
-
-        padded_x1 = int(max(0, x1 - self.padding))
-        padded_y1 = int(max(0, y1 - self.padding))
-        padded_x2 = int(min(w, x2 + self.padding))
-        padded_y2 = int(min(h, y2 + self.padding))
-
-        cropped_frame = annotated_frame[padded_y1:padded_y2 + self.padding, padded_x1:padded_x2 + self.padding]
-
-        overlay_width = w // 4
-        overlay_height = int((padded_y2 - padded_y1) * (overlay_width / (padded_x2 - padded_x1)))
-
-        upscaled_cropped_frame = cv2.resize(cropped_frame, (overlay_width, overlay_height))
-
-        overlay_x = w - overlay_width - self.padding
-        overlay_y = self.padding
-
-        if overlay_y + overlay_height <= h and overlay_x + overlay_width <= w:
-
-            annotated_frame[
-                overlay_y:overlay_y + overlay_height,
-                overlay_x:overlay_x + overlay_width
-            ] = upscaled_cropped_frame
-
-        # Add license plate label separately (example)
-        plate_label_bg_height = annotated_frame.shape[0] // 14  # Adjust as needed
-        plate_label_bg_y = overlay_y + overlay_height - plate_label_bg_height
-        plate_label_bg_x = overlay_x
-        plate_label_bg_width = overlay_width
-
-        # Create a black rectangle for the label
-        annotated_frame[plate_label_bg_y:overlay_y + overlay_height, plate_label_bg_x:overlay_x + overlay_width] = (0, 0, 0)
-
-        # Center the label text
-        text_width, text_height = cv2.getTextSize(test_plate, self.font, self.font_scale, self.font_thickness)[0]
-        text_x = plate_label_bg_x + (plate_label_bg_width - text_width) // 2
-        text_y = plate_label_bg_y + (plate_label_bg_height + text_height) // 2
-
-        # Add the label text
-        cv2.putText(
-            annotated_frame,
-            test_plate, 
-            (text_x, text_y),  
-            self.font,
-            self.font_scale,  
-            self.font_colour,
-            self.font_thickness
-        )
-
-
-        label = f'ID: {ID} | Captured: {captured_at} | Speed: {str(detection["speed"])}mph'
-        
-        final_frame = self.annotate_label_onto_bg(annotated_frame, label)
-
-        return final_frame
-    
-
-    def annotate_label_onto_bg(self, frame, label, plate_present=False):
-
-        frame = frame.copy()
-
-        h, w, _ = frame.shape
-
-        text_width, text_height = cv2.getTextSize(label, self.font, self.font_scale, self.font_thickness)[0]
-
-        label_height = text_height + self.padding * 2
-        label_y1 = h - label_height
-
-        if plate_present:
-            frame[label_y1:h, 0:w // 4] = (0, 0, 0)
-        else:
-            frame[label_y1:h, 0:w] = (0, 0, 0)
-
-        bg_cx = w // 2
-        bg_cy = label_y1 + label_height // 2
-
-        label_pos_x1 = bg_cx - (text_width // 4)  # Quarter adjustment for centering
-        label_pos_y1 = bg_cy + text_height // 2
-
-        current_font_scale = max(0.5, min(1.0, w / 1000))  # Dynamic font scale
-
-        cv2.putText(
-            frame,
-            label,
-            (label_pos_x1, label_pos_y1),
-            self.font,
-            current_font_scale,
-            self.font_colour,
-            self.font_thickness,
-        )
+            cv2.ellipse(
+                frame, 
+                (center_x, center_y),
+                (radius, radius),
+                0, start_angle, end_angle,
+                self.bg_colour,
+                -1
+            )
 
         return frame
 
 
-    def annotate_center_point(self, frame, center_point):
+    def draw_label_text(self, frame, label, position, text_size, font_scale) -> None:
 
         ''' '''
 
+        text_x = position['x'] + self.label_padding
+        text_y = position['y'] + text_size[1] + self.label_padding
+
+        cv2.putText(
+            frame,
+            label,
+            (text_x, text_y),
+            self.font,
+            font_scale,
+            self.font_colour,
+            self.font_thickness,
+            lineType=cv2.LINE_AA
+        )
+
+    
+    def annotate_label(self, frame : np.ndarray, detection : dict, vision_type : str) -> np.ndarray:
+
+        '''
+        '''
+
+        detection_label = self.create_label(detection=detection, vision_type=vision_type)
+
+        # Fetch detection bounding box values, typecast to full integer values. 
+        y2= int(detection['y2'])
+        center_x, center_y = calculate_center_point(detection)
+
+        if vision_type == 'object_tracking':
+            self.annotate_center_point_trail(frame=frame, center_points=detection.get('center_points', []))
+
+        text_size, font_scale = self.fetch_text_properties(detection_label, frame)
+        label_position = self.calculate_label_position(y2, (center_x, center_y), text_size)
+
+        self.draw_label_background(frame, label_position)
+        self.draw_label_text(frame, detection_label, label_position, text_size, font_scale)
+
+        return frame
+    
+
+    def create_label(self, detection : dict, vision_type : str, captured_at = None) -> str:
+
+        ''' Generate appropriate label to support required vision type. '''
+
+        detection_labels = {
+            'object_detection': f"ID: {detection.get('ID')} | Class: {detection.get('classname')} | Confidence Score: {detection.get('confidence_score'):.2f}",
+            'object_tracking':  f"ID: {detection.get('ID')}",
+            'speed_estimation': f"ID: {detection.get('ID')} | Speed: {detection.get('speed')}mph",
+            'plate_reading': f"ID: {detection.get('ID')} | Plate: {detection.get('license_plate', {}).get('plate_text', '')}",
+            'traffic_violation' : f"ID: {detection.get('ID')} | Captured: {captured_at} | Speed: {str(detection.get('speed'))}mph"
+        }
+
+        return detection_labels.get(vision_type, 'object_detection')
+
+
+    def annotate_center_point(self, frame : np.ndarray, center_point : tuple[int, int]) -> np.ndarray:
+
+        '''
+            Annotate a detections center point onto the frame. 
+
+            Paramaters:
+                * frame : (np.ndarray) : The frame to be drawn upon.
+                * center_point : (tuple[int, int]) : center x and center y coordinates of the detections center. 
+            Returns:
+                * frame : (np.ndarray) : The modified frame with a drawn center point.
+        '''
+
+        # Unpack center x and y values. 
         center_x, center_y = center_point
 
+        # Use cv2 function to draw center point dot. 
         cv2.circle(
             frame,
             (center_x, center_y),
@@ -395,33 +272,138 @@ class Annotations(object):
             self.bbox_colours['offender'],
             self.thickness
         )
+
+        return frame 
         
 
-    def annotate_center_point_trail(self, frame, detection):
+    def annotate_center_point_trail(self, frame : np.ndarray, center_points : list[tuple[int, int]]) -> np.ndarray:
 
-        ''' '''
+        '''
+            Annotate a detections center point onto the frame. 
 
-        if 'center_points' not in detection:
+            Paramaters:
+                * frame : (np.ndarray) : The frame to be drawn upon.
+                * detection : (dict) : Detection dictionary containing a list of its prior center points to annotate 
+                    its trail over time. 
+            Returns:
+                * frame : (np.ndarray) : Modified frame where trail has been drawn. 
+        '''
+
+        if len(center_points) < 2:
             return frame
-    
-        center_points_list = detection['center_points']
-        points_list_length = len(center_points_list)
 
-        initial_center_point = center_points_list[0]
-        final_center_point = center_points_list[-1]
-
-        self.annotate_center_point(frame, initial_center_point)
-
-        for x in range(1, points_list_length):
+        # Iterate over center points list entries and render each onto frame.
+        for x in range(1, len(center_points)):
 
             cv2.line(
                 frame,
-                center_points_list[x - 1],
-                center_points_list[x],
+                center_points[x - 1],
+                center_points[x],
                 self.bbox_colours['trail'],
                 self.trail_thickness
             )
 
-        self.annotate_center_point(frame, final_center_point)
+        # Annotate last most center point.
+        self.annotate_center_point(frame, center_points[0])
+        # Render current most center point value.
+        self.annotate_center_point(frame, center_points[-1])
 
         return frame
+    
+
+    def capture_traffic_violation(self, frame, detection, captured_at):
+
+        ''' '''
+
+        ''' Plate Extraction. '''
+
+        license_plate = detection.get('license_plate', {}).get('plate_text', 'OCCLUDED')
+
+        ''' Fetch bbox coords. '''
+        x1, x2, y1, y2 = detection['x1'], detection['x2'], detection['y1'], detection['y2']
+        
+
+        ''' Copy and annotate frame. '''
+        captured_frame = frame.copy()
+        # Annotate detection of concern.
+        annotated_frame = self.annotate_bbox_corners(captured_frame, detection)
+
+        ''' Calcualte padded coords for cropping. '''
+        h, w = annotated_frame.shape[:2]
+        padded_x1 = int(max(0, x1 - self.padding))
+        padded_y1 = int(max(0, y1 - self.padding))
+        padded_x2 = int(min(w, x2 + self.padding))
+        padded_y2 = int(min(h, y2 + self.padding))
+
+        ''' Crop and upscale detection. '''
+
+        cropped_frame = annotated_frame[padded_y1:padded_y2 + self.padding, padded_x1:padded_x2 + self.padding]
+        overlay_width = w // 4
+        overlay_height = int((padded_y2 - padded_y1) * (overlay_width / (padded_x2 - padded_x1)))
+        upscaled_cropped_frame = cv2.resize(cropped_frame, (overlay_width, overlay_height))
+
+        ''' Append crop to annotated fram.e '''
+        overlay_x = w - overlay_width - self.padding
+        overlay_y = self.padding
+        if overlay_y + overlay_height <= h and overlay_x + overlay_width <= w:
+
+            annotated_frame[
+                overlay_y:overlay_y + overlay_height,
+                overlay_x:overlay_x + overlay_width
+            ] = upscaled_cropped_frame
+
+        ''' Append license plate label to frame. '''
+        # Add license plate label separately.
+        plate_label_bg_height = annotated_frame.shape[0] // 14 
+        plate_label_bg_y = overlay_y + overlay_height - plate_label_bg_height
+        plate_label_bg_x = overlay_x
+        plate_label_bg_width = overlay_width
+
+        # Create a black rectangle for the bottom label
+        annotated_frame[plate_label_bg_y:overlay_y + overlay_height, plate_label_bg_x:overlay_x + overlay_width] = (0, 0, 0)
+
+        # Center the label text
+        (plate_text_width, plate_text_height), plate_font_scale = self.fetch_text_properties(license_plate, annotated_frame)
+        text_x = plate_label_bg_x + (plate_label_bg_width - plate_text_width) // 2
+        text_y = plate_label_bg_y + (plate_label_bg_height + plate_text_height) // 2
+
+        # Add the PLATE label text
+        cv2.putText(
+            annotated_frame,
+            license_plate, 
+            (text_x, text_y),  
+            self.font,
+            plate_font_scale,  
+            self.font_colour,
+            self.font_thickness
+        )
+
+        ''' Append capture metadata to bottom of frame. '''
+
+        # Create bottom label. 
+        label = self.create_label(detection, 'traffic_violation', captured_at)
+        (label_text_width, label_text_height), label_font_scale = self.fetch_text_properties(label, annotated_frame)
+        
+        label_height = label_text_height + self.padding * 2
+        label_y1 = h - label_height
+
+        annotated_frame[label_y1:h, 0:w] = (0, 0, 0)
+        
+        bg_cx = w // 2
+        bg_cy = label_y1 + label_height // 2
+
+        label_pos_x1 = bg_cx - (label_text_width // 2)  
+        label_pos_y1 = bg_cy + label_text_height // 2
+
+        cv2.putText(
+            annotated_frame,
+            label,
+            (label_pos_x1, label_pos_y1),
+            self.font,
+            label_font_scale,
+            self.font_colour,
+            self.font_thickness,
+        )
+
+        return annotated_frame
+    

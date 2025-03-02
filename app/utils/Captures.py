@@ -1,20 +1,22 @@
 import datetime
 import cv2 
-from ..Settings import *
+from ..Settings import CAPTURES_DIR_PATH, BASE_YOLO_CONFIDENCE_THRESHOLD
 import time
+import os
+from .Annotations import Annotations
 
 
 class Captures(object):
 
 
-    def __init__(self, annotations, speed_limit = 0, deregistration_time=12):
+    def __init__(self, annotations : Annotations, speed_limit = 0, deregistration_time=12):
         self.annotations = annotations
         self.speed_limit = speed_limit
         self.captured_offenders = {}
         self.deregistration_time = deregistration_time
 
 
-    def capture_offense(self,detection, frame):
+    def capture_offense(self, detection, frame):
 
         detection['offender'] = True
 
@@ -22,7 +24,7 @@ class Captures(object):
 
         filename = os.path.join(CAPTURES_DIR_PATH, f'{captured_at}.jpg')
 
-        cropped_frame = self.annotations.crop_detection(frame, detection, captured_at)
+        cropped_frame = self.annotations.capture_traffic_violation(frame, detection, captured_at)
        
         try:
             cv2.imwrite(filename, cropped_frame)

@@ -18,7 +18,9 @@ class ObjectDetection(object):
         # Load specific model from constructor. 
         self.detection_model = YOLO(model)
 
-        #  Most likely classnames for traffic management and their average sizes in mm found in the UK. 
+        self.class_list = self.detection_model.names
+
+        #  Most likely classnames for traffic management and their average sizes in METERS found in the UK. 
         self.classes_of_interest = {
             'car' : {
                 'width' : 1.821, 'height' : 1.534
@@ -31,6 +33,9 @@ class ObjectDetection(object):
             },
             'truck' : {
                 'width' :  2.400, 'height' : 2.590
+            },
+            'License_Plate' : {
+                'width': 0.52, 'height': 0.11
             }
         } 
 

@@ -1,9 +1,9 @@
 
 # 🏠 AI-Powered Traffic Management System.
-### ⚠️ Work in Progress
+## ⚠️ Work in Progress
 
 This project is currently an ongoing development and currently visible for demonstration purposes only. Further documentation
-    will be provided as the project expands and features are implemented.
+    and bug fixing will be provided as the project expands and features are implemented.
 
 ## Overview
 
@@ -32,13 +32,22 @@ By leveraging deep learning techniques to monitor and manage traffic in real tim
     ✔️ Real-time Object Detection with YOLO V11
         - High confidence detection for mitigation of false positives.
         - Classname filtration to cull irrelevant detections.
+
+        ![object detection](/docs/detection.jpg)
+
     ✔️ Object Tracking
         - Assign IDs to detections.
         - Estimate detection tracjectory.
+
+        ![object tracking](/docs/tracking.jpg)
+
     ✔️ Speed Estimation
         - Weighted average of frame based and average speed estimation.
         - Vehicles exceeding the set limit are captured.
         - Customisable speed limits.
+
+        ![object speed estimation](/docs/estimation.jpg)
+
     ✔️ Annotations
         - Classnames
         - Confidence Scores
@@ -60,7 +69,7 @@ By leveraging deep learning techniques to monitor and manage traffic in real tim
         * Ultralytics YOLO V11 (https://www.ultralytics.com/yolo)
             - Current V11 model weights included, access site should there be model issues to access
                 most up to date.
-        * OpenCv
+        * OpenCV
         * Numpy
         
 
