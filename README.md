@@ -33,20 +33,20 @@ By leveraging deep learning techniques to monitor and manage traffic in real tim
         - High confidence detection for mitigation of false positives.
         - Classname filtration to cull irrelevant detections.
 
-        ![object detection](./docs/detection.jpg)
+![object detection](./docs/detection.jpg)
 
     ✔️ Object Tracking
         - Assign IDs to detections.
         - Estimate detection tracjectory.
 
-        ![object tracking](./docs/tracking.jpg)
+![object tracking](./docs/tracking.jpg)
 
     ✔️ Speed Estimation
         - Weighted average of frame based and average speed estimation.
         - Vehicles exceeding the set limit are captured.
         - Customisable speed limits.
 
-        ![object speed estimation](./docs/estimation.jpg)
+![object speed estimation](./docs/estimation.jpg)
 
     ✔️ Annotations
         - Classnames
