@@ -1,4 +1,5 @@
 import numpy as np
+
 from .Settings import *
 
 from .utils.ObjectDetection import ObjectDetection

@@ -42,8 +42,10 @@ class Annotations(object):
 
         for detection in detections:
 
+            # Annotate vehicle corners.
             frame = self.annotate_bbox_corners(frame, detection)
 
+            # Annotate metadata labels.
             frame = self.annotate_label(frame, detection, vision_type)
 
         return frame
