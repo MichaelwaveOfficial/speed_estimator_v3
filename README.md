@@ -3,7 +3,15 @@
 ## ⚠️ Work in Progress
 
 This project is currently an ongoing development and currently visible for demonstration purposes only. Further documentation
-    and bug fixing will be provided as the project expands and features are implemented.
+    and bug fixing will be provided as the project expands and features are implemented. It is worth noting that the data produced is heavily 
+    dependant on the video being processed due to model limitations and other comptuer vision specific hardships that come with random video inputs. 
+
+CURRENTLY, THIS IMPLEMENTATION FOCUSES ON TWO SEPARATE MODELS:
+
+    1 -> VEHICLE DETECTION.
+    2 -> PLATE DETECTION.
+
+THIS COMES WITH CERTAIN DIFFICULTIES AND IS CURRENTLY SHELVED, MEANING MANY BUGS ARE CURRENTLY PRESENT.
 
 ## Overview
 
@@ -46,6 +54,13 @@ By leveraging deep learning techniques to monitor and manage traffic in real tim
         - Vehicles exceeding the set limit are captured.
         - Customisable speed limits.
 
+![Plate Detection](./docs/plate_reading.jpg.jpg.jpg)
+
+    ✔️ License Plate Detection (ANPR)
+        - Crop and preprocess license plates.
+        - Fed to OCR model. 
+        - Processed with proprietary logic and appended to vehicle data.
+
 ![object speed estimation](./docs/estimation.jpg)
 
     ✔️ Annotations
@@ -53,6 +68,8 @@ By leveraging deep learning techniques to monitor and manage traffic in real tim
         - Confidence Scores
         - IDs
         - Speed
+
+
 
 # 🔧 Prerequisites
 
