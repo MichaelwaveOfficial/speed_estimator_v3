@@ -54,7 +54,7 @@ By leveraging deep learning techniques to monitor and manage traffic in real tim
         - Vehicles exceeding the set limit are captured.
         - Customisable speed limits.
 
-![Plate Detection](./docs/plate_reading.jpg.jpg.jpg)
+![Plate Detection](./docs/plate_reading.jpg)
 
     ✔️ License Plate Detection (ANPR)
         - Crop and preprocess license plates.
